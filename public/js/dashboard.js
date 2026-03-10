@@ -6,7 +6,7 @@ const msg = (t, ok) => {
   setTimeout(() => el.classList.add('hidden'), 4000);
 };
 document.getElementById('userEmail').textContent = 'Cargando…';
-const fetcho = (url, opts) => fetch(url, { credentials: 'include', ...opts });
+const fetcho = (url, opts) => fetch(url, { ...opts, credentials: 'include', headers: { 'X-Requested-With': 'XMLHttpRequest', ...opts?.headers } });
 const checkAuth = r => { if (r.status === 401) { sessionStorage.removeItem('oci-vm-authed'); location.replace('/login.html'); return null; } return r; };
 fetcho('/api/me').then(checkAuth).then(r => r && r.json()).then(u => { if (u) document.getElementById('userEmail').textContent = u.email || ''; });
 

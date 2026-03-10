@@ -1,6 +1,8 @@
 require('dotenv').config();
 const path = require('path');
 const fs = require('fs');
+const dns = require('dns').promises;
+const net = require('net');
 const express = require('express');
 const session = require('express-session');
 const rateLimit = require('express-rate-limit');
@@ -21,10 +23,23 @@ if (isProd && (!sessionSecret || sessionSecret === 'change-me-in-production')) {
   process.exit(1);
 }
 
+function safeError(err, defaultMsg = 'Error interno') {
+  return isProd ? defaultMsg : (err?.message || defaultMsg);
+}
+
 function requireAuth(req, res, next) {
   if (req.session?.user) return next();
   if (req.path.startsWith('/api/')) return res.status(401).json({ error: 'No autorizado' });
   return res.redirect('/login.html');
+}
+
+// CSRF: state-changing API requests (POST/PUT/DELETE) must come from our frontend
+function requireCsrf(req, res, next) {
+  if (!['POST', 'PUT', 'DELETE', 'PATCH'].includes(req.method)) return next();
+  const safe = req.get('X-Requested-With') === 'XMLHttpRequest' || req.get('Sec-Fetch-Dest') === 'empty';
+  if (safe) return next();
+  if (req.path.startsWith('/api/')) return res.status(403).json({ error: 'Solicitud no permitida' });
+  next();
 }
 
 app.use(helmet({
@@ -64,6 +79,7 @@ app.use(session({
     maxAge: 24 * 60 * 60 * 1000,
   },
 }));
+app.use(requireCsrf);
 
 app.get('/login.html', (req, res) => {
   if (req.session?.user) return res.redirect('/');
@@ -91,6 +107,9 @@ app.post('/api/login', loginLimiter, (req, res) => {
   if (typeof email !== 'string' || typeof password !== 'string') {
     return res.status(400).json({ error: 'Datos inválidos' });
   }
+  if (password.length > 256 || email.length > 254) {
+    return res.status(400).json({ error: 'Datos inválidos' });
+  }
   if (email.trim().toLowerCase() !== expectedEmail.toLowerCase()) {
     return res.status(401).json({ error: 'Credenciales inválidas' });
   }
@@ -115,17 +134,72 @@ app.get('/api/me', (req, res) => {
   res.json(req.session.user);
 });
 
+// SSRF protection: block internal/private hosts + DNS rebinding (OWASP)
+const BLOCKED_HOSTNAMES = /^(localhost|127\.|10\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.|169\.254\.|metadata\.|.*\.local$|.*\.internal$|.*\.localhost$)$/i;
+const BLOCKED_IPS = [
+  /^127\./, /^10\./, /^172\.(1[6-9]|2[0-9]|3[01])\./, /^192\.168\./,
+  /^169\.254\./, /^0\./, /^224\./, /^240\./, /^fc00:/i, /^fe80:/i, /^::1$/i, /^fd[0-9a-f]{2}:/i
+];
+function isPrivateIP(ip) {
+  if (!ip) return true;
+  return BLOCKED_IPS.some(r => r.test(ip));
+}
+// Block decimal IP (2130706433=127.0.0.1) and 0x7f... hex
+function isDecimalOrHexPrivate(str) {
+  const s = str.toLowerCase();
+  if (/^\d+$/.test(s)) {
+    const n = parseInt(s, 10);
+    if (n >= 2130706433 && n <= 2130706433 + 0xffffff) return true; // 127.x.x.x
+    if (n >= 167772160 && n <= 184549375) return true;   // 10.0.0.0/8
+    if (n >= 2886729728 && n <= 2886795263) return true; // 172.16.0.0/12
+    if (n >= 3232235520 && n <= 3232301055) return true; // 192.168.0.0/16
+  }
+  if (/^0x[0-9a-f]+$/i.test(s)) {
+    const n = parseInt(s, 16);
+    if (n >= 0x7f000001 && n <= 0x7fffffff) return true; // 127.0.0.1-127.255.255.255
+    if (n >= 0x0a000000 && n <= 0x0affffff) return true; // 10.0.0.0/8
+    if (n >= 0xac100000 && n <= 0xac1fffff) return true; // 172.16.0.0/12
+    if (n >= 0xc0a80000 && n <= 0xc0a8ffff) return true; // 192.168.0.0/16
+  }
+  return false;
+}
+async function validateHostForSSRF(host) {
+  const h = host.split(/[/?#]/)[0].split(':')[0].toLowerCase().replace(/^\[|\]$/g, '');
+  if (!h || h.length > 253) return null;
+  if (BLOCKED_HOSTNAMES.test(h)) return null;
+  if (isDecimalOrHexPrivate(h)) return null;
+  try {
+    const family = net.isIP(h);
+    if (family) return isPrivateIP(h) ? null : { ip: h, family, hostname: h };
+    const [addr, fam] = await dns.lookup(h, { verbatim: true });
+    if (isPrivateIP(addr)) return null;
+    return { ip: addr, family: fam || 4, hostname: h };
+  } catch (_) { return null; }
+}
+
 const checkDomainLimiter = rateLimit({ windowMs: 60 * 1000, max: 30, message: { ok: false }, validate: { xForwardedForHeader: false } });
-app.get('/api/check-domain', requireAuth, checkDomainLimiter, (req, res) => {
-  const domain = (req.query.domain || '').toString().trim().replace(/^https?:\/\//, '');
+app.get('/api/check-domain', requireAuth, checkDomainLimiter, async (req, res) => {
+  const domain = (req.query.domain || '').toString().trim().replace(/^https?:\/\//, '').split(/[/?#]/)[0].split(':')[0];
   if (!domain || domain.length > 253) return res.status(400).json({ ok: false, error: 'Dominio inválido' });
-  const url = `https://${domain}/`;
-  const clientReq = https.request(url, { method: 'HEAD' }, (r) => {
-    r.resume(); // consume stream
-    res.json({ ok: r.statusCode >= 200 && r.statusCode < 400 });
+  const resolved = await validateHostForSSRF(domain);
+  if (!resolved) return res.status(400).json({ ok: false, error: 'Dominio no permitido (SSRF)' });
+  // Pin connection to validated IP (prevents DNS rebinding - OWASP)
+  const { ip, family, hostname } = resolved;
+  const lookup = (host, opts, cb) => cb(null, ip, family);
+  const clientReq = https.request({
+    host: ip,
+    hostname,
+    port: 443,
+    path: '/',
+    method: 'HEAD',
+    lookup,
+    servername: hostname,
+  }, (r) => {
+    r.resume();
+    if (!res.headersSent) res.json({ ok: r.statusCode >= 200 && r.statusCode < 400 });
   });
-  clientReq.on('error', () => res.json({ ok: false }));
-  clientReq.on('timeout', () => { clientReq.destroy(); res.json({ ok: false }); });
+  clientReq.on('error', () => { if (!res.headersSent) res.json({ ok: false }); });
+  clientReq.on('timeout', () => { clientReq.destroy(); if (!res.headersSent) res.json({ ok: false }); });
   clientReq.setTimeout(8000);
   clientReq.end();
 });
@@ -134,7 +208,7 @@ app.get('/api/sites', requireAuth, (req, res) => {
   try {
     res.json({ sites: caddy.getSites() });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    res.status(500).json({ error: safeError(e, 'Error al cargar sitios') });
   }
 });
 
@@ -165,7 +239,7 @@ app.put('/api/sites', requireAuth, (req, res) => {
     caddy.saveSites(sanitized);
     res.json({ ok: true });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    res.status(500).json({ error: safeError(e, 'Error al guardar') });
   }
 });
 
@@ -186,7 +260,7 @@ app.post('/api/caddy/deploy', requireAuth, deployLimiter, async (req, res) => {
       execSync('sudo cp /tmp/caddyfile-deploy /etc/caddy/Caddyfile && sudo systemctl reload caddy');
       return res.json({ ok: true });
     } catch (e) {
-      return res.status(500).json({ error: e.message || 'Deploy falló' });
+      return res.status(500).json({ error: safeError(e, 'Deploy falló') });
     }
   }
 
@@ -208,22 +282,27 @@ app.post('/api/caddy/deploy', requireAuth, deployLimiter, async (req, res) => {
 
   const b64 = Buffer.from(content, 'utf8').toString('base64');
   const conn = new Client();
+  const sendErr = (msg) => { if (!res.headersSent) res.status(500).json({ error: msg }); };
+  const sshTimeout = setTimeout(() => { conn.destroy(); sendErr('Deploy timeout (30s)'); }, 30000);
   conn.on('ready', () => {
     conn.exec('echo ' + b64 + ' | base64 -d | sudo tee /etc/caddy/Caddyfile > /dev/null && sudo systemctl reload caddy', (err, stream) => {
       if (err) {
+        clearTimeout(sshTimeout);
         conn.end();
-        return res.status(500).json({ error: err.message });
+        return sendErr(safeError(err, 'Deploy falló'));
       }
       let stderr = '';
       stream.stderr.on('data', d => { stderr += d.toString(); });
       stream.on('close', (code) => {
+        clearTimeout(sshTimeout);
         conn.end();
-        if (code !== 0) return res.status(500).json({ error: stderr || 'Deploy falló' });
+        if (res.headersSent) return;
+        if (code !== 0) return res.status(500).json({ error: isProd ? 'Deploy falló' : (stderr || 'Deploy falló') });
         res.json({ ok: true });
       });
     });
   }).connect({ host, port: 22, username: user, privateKey: key });
-  conn.on('error', (err) => res.status(500).json({ error: err.message }));
+  conn.on('error', (err) => { clearTimeout(sshTimeout); sendErr(safeError(err, 'Deploy falló')); });
 });
 
 app.listen(PORT, '0.0.0.0', () => {

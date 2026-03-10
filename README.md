@@ -132,6 +132,8 @@ oci-vm-manager/
 - **Validación estricta**: dominios (hostname válido), puertos (1-65535)
 - **Session**: regeneración en login, SameSite=Lax, httpOnly, Secure cuando `FORCE_SECURE_COOKIE=1`
 - **XSS**: escape de HTML en el dashboard
+- **SSRF**: `/api/check-domain` bloquea localhost, IPs privadas, metadata (169.254.x), .local, .internal, IP decimal/hex (2130706433, 0x7f…); conexión fijada al IP resuelto (anti DNS rebinding)
+- **CSRF**: peticiones POST/PUT/DELETE exigen header `X-Requested-With` (envío desde nuestro frontend)
 - **Producción**: `SESSION_SECRET` obligatorio; `FORCE_SECURE_COOKIE=1` detrás de HTTPS
 
 ---
