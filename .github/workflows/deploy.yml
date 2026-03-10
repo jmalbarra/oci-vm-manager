@@ -2,6 +2,9 @@ name: Deploy to OCI
 
 # Deploy oci-vm-manager al servidor compartido al mergear PR a main.
 # Secrets requeridos: SSH_PRIVATE_KEY, SERVER_IP (mismo servidor que turnero)
+#
+# Si cambiás .env en el servidor manualmente, reiniciá pm2 para que tome los cambios:
+#   pm2 restart oci-vm-manager
 
 on:
   push:

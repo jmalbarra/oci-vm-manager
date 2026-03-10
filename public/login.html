@@ -32,19 +32,25 @@
       const err = document.getElementById('loginError');
       err.classList.add('hidden');
       const fd = new FormData(e.target);
-      const res = await fetch('/api/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: fd.get('email'), password: fd.get('password') })
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        err.textContent = data.error || 'Error';
+      try {
+        const res = await fetch('/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: fd.get('email'), password: fd.get('password') })
+        });
+        let data = {};
+        try { data = await res.json(); } catch (_) { data = { error: 'Respuesta inválida del servidor' }; }
+        if (!res.ok) {
+          err.textContent = data.error || (res.status === 429 ? 'Demasiados intentos. Esperá 15 min.' : 'Credenciales inválidas');
+          err.classList.remove('hidden');
+          return;
+        }
+        sessionStorage.setItem('oci-vm-authed', '1');
+        location.replace('/');
+      } catch (e) {
+        err.textContent = 'Error de conexión. Revisá la red e intentá de nuevo.';
         err.classList.remove('hidden');
-        return;
       }
-      sessionStorage.setItem('oci-vm-authed', '1');
-      location.replace('/');
     };
   </script>
 </body>
