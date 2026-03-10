@@ -239,6 +239,31 @@ async function validateHostForSSRF(host) {
   } catch (_) { return null; }
 }
 
+function errToFriendly(msg) {
+  const m = String(msg || '');
+  if (m.includes('ECONNREFUSED')) return 'Conexión rechazada (puerto cerrado o firewall)';
+  if (m.includes('ETIMEDOUT') || m.includes('timeout')) return 'Tiempo de espera agotado';
+  if (m.includes('ENOTFOUND')) return 'No se resolvió el dominio';
+  if (m.includes('CERT') || m.includes('certificate')) return 'Error de certificado SSL';
+  if (m.includes('ECONNRESET')) return 'Conexión cerrada por el servidor';
+  return m || 'Error de conexión';
+}
+
+function doHttpsHead(host, hostname, lookup) {
+  return new Promise((resolve) => {
+    const opts = { host, hostname, port: 443, path: '/', method: 'HEAD', servername: hostname };
+    if (lookup) opts.lookup = lookup;
+    const req = https.request(opts, (r) => {
+      r.resume();
+      resolve({ ok: r.statusCode >= 200 && r.statusCode < 400, error: r.statusCode >= 400 ? `HTTP ${r.statusCode}` : null });
+    });
+    req.on('error', (err) => resolve({ ok: false, error: errToFriendly(err.message) }));
+    req.on('timeout', () => { req.destroy(); resolve({ ok: false, error: 'Tiempo de espera agotado' }); });
+    req.setTimeout(6000);
+    req.end();
+  });
+}
+
 const checkDomainLimiter = rateLimit({ windowMs: 60 * 1000, max: 30, message: { ok: false }, validate: { xForwardedForHeader: false } });
 app.get('/api/check-domain', requireAuth, checkDomainLimiter, async (req, res) => {
   const domain = (req.query.domain || '').toString().trim().replace(/^https?:\/\//, '').split(/[/?#]/)[0].split(':')[0];
@@ -246,27 +271,24 @@ app.get('/api/check-domain', requireAuth, checkDomainLimiter, async (req, res) =
   const resolved = await validateHostForSSRF(domain);
   if (!resolved) return res.status(400).json({ ok: false, error: 'Dominio no permitido (SSRF)' });
   const { ip, family, hostname } = resolved;
-  const ociHost = process.env.OCI_HOST;
-  // Hairpin NAT: si el dominio resuelve a nuestro servidor, conectar a localhost (la VM no puede alcanzar su propia IP pública)
-  const connectHost = (ociHost && ip === ociHost.trim()) ? '127.0.0.1' : ip;
-  const lookup = (ociHost && ip === ociHost.trim()) ? undefined : (host, opts, cb) => cb(null, ip, family);
-  const opts = {
-    host: connectHost,
-    hostname,
-    port: 443,
-    path: '/',
-    method: 'HEAD',
-    servername: hostname,
-  };
-  if (lookup) opts.lookup = lookup;
-  const clientReq = https.request(opts, (r) => {
-    r.resume();
-    if (!res.headersSent) res.json({ ok: r.statusCode >= 200 && r.statusCode < 400 });
-  });
-  clientReq.on('error', () => { if (!res.headersSent) res.json({ ok: false }); });
-  clientReq.on('timeout', () => { clientReq.destroy(); if (!res.headersSent) res.json({ ok: false }); });
-  clientReq.setTimeout(8000);
-  clientReq.end();
+  const ociHost = process.env.OCI_HOST?.trim();
+  const ociPublicIp = process.env.OCI_PUBLIC_IP?.trim();
+  const isOurServer = (ociHost && ip === ociHost) || (ociPublicIp && ip === ociPublicIp);
+  let result;
+
+  if (isOurServer) {
+    result = await doHttpsHead('127.0.0.1', hostname, undefined);
+  } else {
+    const lookup = (h, opts, cb) => cb(null, ip, family);
+    result = await doHttpsHead(ip, hostname, lookup);
+    // Hairpin NAT: si falló (timeout/refused) y corremos en esta VM, reintentar con localhost
+    if (!result.ok && (ociHost === '127.0.0.1' || ociHost === 'localhost' || !ociHost)) {
+      const retry = await doHttpsHead('127.0.0.1', hostname, undefined);
+      if (retry.ok) result = retry;
+    }
+  }
+
+  res.json(result);
 });
 
 app.get('/api/sites', requireAuth, (req, res) => {
