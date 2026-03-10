@@ -48,7 +48,7 @@
     </section>
   </main>
   <script>
-    if (!sessionStorage.getItem('oci-vm-authed')) location.replace('/login.html');
+    // No chequear sessionStorage: el servidor ya protege / con sesión. sessionStorage provoca bucle / <-> /login.html
     const msg = (t, ok) => {
       const el = document.getElementById('msg');
       el.textContent = t;
@@ -84,6 +84,10 @@
             <input type="checkbox" class="site-redirect-www" ${site.redirectWww ? 'checked' : ''}>
             Redirigir www
           </label>
+        </div>
+        <div class="site-status" data-idx="${i}">
+          <span class="status-dot status-pending" title="Sin verificar"></span>
+          <button type="button" class="btn btn-ghost btn-check" data-idx="${i}" title="Verificar si responde">Verificar</button>
         </div>
         <div class="site-actions">
           <button type="button" class="btn btn-secondary btn-preview" data-idx="${i}">Previsualizar</button>
@@ -152,12 +156,44 @@
         el.querySelector('.btn-preview').onclick = () => {
           const domain = el.querySelector('.site-domain').value.trim();
           if (!domain) { msg('Ingresá un dominio para previsualizar', false); return; }
-          window.open('https://' + domain.replace(/^https?:\/\//, ''), '_blank');
+          const a = document.createElement('a');
+          a.href = 'https://' + domain.replace(/^https?:\/\//, '');
+          a.target = '_blank';
+          a.rel = 'noopener noreferrer';
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
         };
         el.querySelector('.btn-remove').onclick = () => showDeleteModal(i, el.querySelector('.site-domain').value.trim());
+        el.querySelector('.btn-check').onclick = () => checkDomain(el);
         el.querySelectorAll('input').forEach(inp => inp.oninput = updatePreview);
       });
       updatePreview();
+      // Verificar todos los dominios con valor al cargar
+      container.querySelectorAll('.site-row').forEach(row => {
+        const domain = row.querySelector('.site-domain')?.value?.trim();
+        if (domain) checkDomain(row);
+      });
+    }
+
+    async function checkDomain(rowEl) {
+      const domain = rowEl.querySelector('.site-domain')?.value?.trim();
+      if (!domain) return;
+      const statusEl = rowEl.querySelector('.status-dot');
+      const btnEl = rowEl.querySelector('.btn-check');
+      statusEl.className = 'status-dot status-checking';
+      statusEl.title = 'Verificando…';
+      btnEl.disabled = true;
+      try {
+        const r = await fetch('/api/check-domain?domain=' + encodeURIComponent(domain));
+        const d = await r.json();
+        statusEl.className = 'status-dot ' + (d.ok ? 'status-ok' : 'status-fail');
+        statusEl.title = d.ok ? 'Funcionando' : 'No responde';
+      } catch (_) {
+        statusEl.className = 'status-dot status-fail';
+        statusEl.title = 'Error al verificar';
+      }
+      btnEl.disabled = false;
     }
 
     document.getElementById('btnAddSite').onclick = () => {
