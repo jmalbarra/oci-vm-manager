@@ -29,20 +29,24 @@ function renderSite(site, i) {
   div.innerHTML = `
     <div class="site-fields">
       <input type="text" class="site-domain" placeholder="dominio.ejemplo.com" value="${esc(site.domain || '')}">
-      <input type="number" class="site-port" placeholder="3000" min="1" max="65535" value="${site.port || 3000}">
-      <label class="site-www">
-        <input type="checkbox" class="site-redirect-www" ${site.redirectWww ? 'checked' : ''}>
-        Redirigir www
-      </label>
+      <div class="site-fields-row">
+        <input type="number" class="site-port" placeholder="3000" min="1" max="65535" value="${site.port || 3000}">
+        <label class="site-www">
+          <input type="checkbox" class="site-redirect-www" ${site.redirectWww ? 'checked' : ''}>
+          Redirigir www
+        </label>
+      </div>
+      <div class="site-status" data-idx="${i}">
+        <span class="status-dot status-pending" title="Sin verificar"></span>
+        <span class="status-msg" aria-live="polite"></span>
+      </div>
     </div>
-    <div class="site-status" data-idx="${i}">
-      <span class="status-dot status-pending" title="Sin verificar"></span>
-      <span class="status-msg" aria-live="polite"></span>
-      <button type="button" class="btn btn-ghost btn-check" data-idx="${i}" title="Verificar si responde">Verificar</button>
-    </div>
-    <div class="site-actions">
-      <button type="button" class="btn btn-secondary btn-preview" data-idx="${i}">Previsualizar</button>
-      <button type="button" class="btn btn-ghost btn-remove" data-idx="${i}">Eliminar</button>
+    <div class="site-meta">
+      <div class="site-actions">
+        <button type="button" class="btn btn-ghost btn-check" data-idx="${i}" title="Verificar si responde">Verificar</button>
+        <button type="button" class="btn btn-secondary btn-preview" data-idx="${i}">Previsualizar</button>
+        <button type="button" class="btn btn-ghost btn-remove" data-idx="${i}">Eliminar</button>
+      </div>
     </div>
   `;
   return div;
