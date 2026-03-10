@@ -34,7 +34,7 @@ Abrí **http://localhost:3080** en el navegador.
 |--------|-------------|
 | ✏️ **Editar dominios** | Agregás/editás dominios con puerto y opción "Redirigir www" |
 | 🔵 **Previsualizar** | Abre el dominio en una pestaña nueva |
-| ✔️ **Verificar** | Comprueba si el dominio responde (luz verde/roja). Cuando el manager corre en la misma VM, usa localhost para evitar hairpin NAT |
+| ✔️ **Verificar** | Luz verde si DNS y HTTPS OK; roja con tooltip del error. Si el manager corre en la misma VM, usa localhost (evita hairpin NAT). Con `OCI_HOST=127.0.0.1` podés agregar `OCI_PUBLIC_IP=IP_DE_TU_SERVIDOR` para que lo use directo |
 | 🗑️ **Eliminar** | Borra un dominio (pide confirmar escribiendo el nombre) |
 | 💾 **Guardar** | Persiste la config en `config/sites.json` y `config/Caddyfile` |
 | 🚀 **Desplegar a VM** | Sube el Caddyfile por SSH, copia a `/etc/caddy/` y recarga Caddy |

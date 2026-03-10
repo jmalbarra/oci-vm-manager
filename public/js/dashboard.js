@@ -137,7 +137,7 @@ async function checkDomain(rowEl) {
     const r = await fetcho('/api/check-domain?domain=' + encodeURIComponent(domain));
     const d = await r.json();
     statusEl.className = 'status-dot ' + (d.ok ? 'status-ok' : 'status-fail');
-    statusEl.title = d.ok ? 'Funcionando' : 'No responde';
+    statusEl.title = d.ok ? 'Funcionando — DNS apunta bien y responde OK' : (d.error || 'No responde');
   } catch (_) {
     statusEl.className = 'status-dot status-fail';
     statusEl.title = 'Error al verificar';
