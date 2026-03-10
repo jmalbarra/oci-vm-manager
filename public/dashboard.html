@@ -14,6 +14,22 @@
       <button id="btnLogout" class="btn btn-ghost">Cerrar sesión</button>
     </div>
   </header>
+  <div id="modalDelete" class="modal hidden">
+    <div class="modal-backdrop" data-dismiss></div>
+    <div class="modal-content">
+      <h3>¿Eliminar dominio?</h3>
+      <p id="modalDeleteText" class="muted"></p>
+      <div class="form-group">
+        <label>Escribí <strong id="modalDeleteDomain"></strong> para confirmar</label>
+        <input type="text" id="modalDeleteConfirm" placeholder="dominio.ejemplo.com" autocomplete="off">
+      </div>
+      <div class="modal-error hidden" id="modalDeleteError"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" data-dismiss>Cancelar</button>
+        <button type="button" class="btn btn-danger" id="modalDeleteBtn">Eliminar</button>
+      </div>
+    </div>
+  </div>
   <main class="main">
     <section class="card">
       <h2>Dominios y puertos</h2>
@@ -69,7 +85,10 @@
             Redirigir www
           </label>
         </div>
-        <button type="button" class="btn btn-ghost btn-remove" data-idx="${i}">Eliminar</button>
+        <div class="site-actions">
+          <button type="button" class="btn btn-secondary btn-preview" data-idx="${i}">Previsualizar</button>
+          <button type="button" class="btn btn-ghost btn-remove" data-idx="${i}">Eliminar</button>
+        </div>
       `;
       return div;
     }
@@ -80,6 +99,38 @@
         port: parseInt(row.querySelector('.site-port').value, 10) || 3000,
         redirectWww: row.querySelector('.site-redirect-www').checked
       })).filter(s => s.domain);
+    }
+
+    let pendingDeleteIdx = null;
+    function showDeleteModal(idx, domain) {
+      if (!domain) { msg('El dominio está vacío', false); return; }
+      pendingDeleteIdx = idx;
+      document.getElementById('modalDeleteDomain').textContent = domain;
+      document.getElementById('modalDeleteText').textContent = 'Escribí el dominio exacto para confirmar que querés eliminarlo.';
+      document.getElementById('modalDeleteConfirm').value = '';
+      document.getElementById('modalDeleteError').classList.add('hidden');
+      document.getElementById('modalDelete').classList.remove('hidden');
+      document.getElementById('modalDeleteConfirm').focus();
+    }
+    function hideDeleteModal() {
+      pendingDeleteIdx = null;
+      document.getElementById('modalDelete').classList.add('hidden');
+    }
+    function confirmDelete() {
+      const domain = document.getElementById('modalDeleteDomain').textContent;
+      const input = document.getElementById('modalDeleteConfirm').value.trim();
+      const errEl = document.getElementById('modalDeleteError');
+      if (input !== domain) {
+        errEl.textContent = 'El dominio no coincide. Escribilo exactamente.';
+        errEl.classList.remove('hidden');
+        return;
+      }
+      if (pendingDeleteIdx != null) {
+        sites.splice(pendingDeleteIdx, 1);
+        render();
+        updatePreview();
+      }
+      hideDeleteModal();
     }
 
     function updatePreview() {
@@ -98,7 +149,12 @@
       sites.forEach((site, i) => {
         const el = renderSite(site, i);
         container.appendChild(el);
-        el.querySelector('.btn-remove').onclick = () => { sites.splice(i, 1); render(); updatePreview(); };
+        el.querySelector('.btn-preview').onclick = () => {
+          const domain = el.querySelector('.site-domain').value.trim();
+          if (!domain) { msg('Ingresá un dominio para previsualizar', false); return; }
+          window.open('https://' + domain.replace(/^https?:\/\//, ''), '_blank');
+        };
+        el.querySelector('.btn-remove').onclick = () => showDeleteModal(i, el.querySelector('.site-domain').value.trim());
         el.querySelectorAll('input').forEach(inp => inp.oninput = updatePreview);
       });
       updatePreview();
@@ -128,6 +184,13 @@
       document.getElementById('btnDeploy').disabled = false;
       if (res.ok) msg('Caddy desplegado y recargado', true);
       else msg(d.error || 'Error', false);
+    };
+
+    document.querySelectorAll('[data-dismiss]').forEach(el => el.addEventListener('click', hideDeleteModal));
+    document.getElementById('modalDeleteBtn').onclick = confirmDelete;
+    document.getElementById('modalDeleteConfirm').onkeydown = (e) => {
+      if (e.key === 'Enter') confirmDelete();
+      if (e.key === 'Escape') hideDeleteModal();
     };
 
     document.getElementById('btnLogout').onclick = async () => {

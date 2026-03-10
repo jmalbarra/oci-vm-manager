@@ -15,6 +15,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 .btn-secondary:hover { background: #cbd5e1; }
 .btn-ghost { background: none; color: #64748b; }
 .btn-ghost:hover { color: #1e293b; }
+.btn-danger { background: #dc2626; color: #fff; }
+.btn-danger:hover { background: #b91c1c; }
 .error { color: #dc2626; font-size: 0.85rem; margin-bottom: 0.5rem; }
 .hidden { display: none !important; }
 .header { background: #1e293b; color: #fff; padding: 1rem 1.5rem; display: flex; justify-content: space-between; align-items: center; }
@@ -36,8 +38,17 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 .site-port { width: 80px; padding: 0.5rem 0.6rem; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 0.95rem; }
 .site-www { display: flex; align-items: center; gap: 0.4rem; font-size: 0.9rem; color: #64748b; cursor: pointer; }
 .site-www input { width: auto; }
+.site-actions { display: flex; gap: 0.5rem; }
 .btn-remove { color: #dc2626 !important; font-size: 0.85rem; }
 .btn-remove:hover { color: #b91c1c !important; }
+
+.modal { position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center; padding: 1rem; }
+.modal-backdrop { position: absolute; inset: 0; background: rgba(0,0,0,0.4); cursor: pointer; }
+.modal-content { position: relative; background: #fff; padding: 1.5rem; border-radius: 12px; box-shadow: 0 20px 60px rgba(0,0,0,0.2); max-width: 400px; width: 100%; }
+.modal-content h3 { margin-bottom: 0.5rem; }
+.modal-content .form-group { margin: 1rem 0; }
+.modal-actions { display: flex; gap: 0.75rem; justify-content: flex-end; margin-top: 1rem; }
+.modal-error { color: #dc2626; font-size: 0.85rem; margin-top: 0.5rem; }
 .card-muted { background: #f8fafc; }
 .card-muted h3 { font-size: 0.95rem; margin-bottom: 0.5rem; color: #64748b; }
 #caddyPreview { background: #1e293b; color: #e2e8f0; padding: 1rem; border-radius: 8px; font-family: 'Monaco','Menlo',monospace; font-size: 0.8rem; overflow-x: auto; margin: 0; white-space: pre; }
