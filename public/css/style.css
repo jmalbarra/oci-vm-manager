@@ -1,6 +1,7 @@
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f1f5f9; color: #1e293b; line-height: 1.5; }
 .login-page { min-height: 100vh; display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, #475569 0%, #1e293b 100%); }
+.login-wrap { display: flex; flex-direction: column; align-items: center; }
 .login-card { background: #fff; padding: 2rem; border-radius: 12px; box-shadow: 0 10px 40px rgba(0,0,0,0.2); width: 100%; max-width: 360px; }
 .login-card h1 { font-size: 1.5rem; margin-bottom: 0.25rem; }
 .login-card p { color: #64748b; margin-bottom: 1.5rem; font-size: 0.9rem; }
@@ -18,6 +19,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 .btn-danger { background: #dc2626; color: #fff; }
 .btn-danger:hover { background: #b91c1c; }
 .error { color: #dc2626; font-size: 0.85rem; margin-bottom: 0.5rem; }
+#loginError { min-height: 1.25em; }
 .hidden { display: none !important; }
 .header { background: #1e293b; color: #fff; padding: 1rem 1.5rem; display: flex; justify-content: space-between; align-items: center; }
 .header h1 { font-size: 1.2rem; }
