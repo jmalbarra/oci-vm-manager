@@ -24,7 +24,8 @@
     </form>
   </div>
   <script>
-    if (sessionStorage.getItem('oci-vm-authed')) location.replace('/');
+    // Solo redirigir si hay sesión válida; evita bucle cuando sessionStorage dice "authed" pero el servidor ya expiró
+    fetch('/api/me').then(r => { if (r.ok) location.replace('/'); });
     document.getElementById('loginForm').onsubmit = async (e) => {
       e.preventDefault();
       const err = document.getElementById('loginError');
