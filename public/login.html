@@ -24,6 +24,9 @@
       <button type="submit" class="btn btn-primary">Entrar</button>
     </form>
   </div>
+  <footer class="footer">
+    Hecho por <a href="https://github.com/jmalbarra" target="_blank" rel="noopener noreferrer">jmalbarra</a>
+  </footer>
   <script>
     // Solo redirigir si hay sesión válida; evita bucle cuando sessionStorage dice "authed" pero el servidor ya expiró
     fetch('/api/me').then(r => { if (r.ok) location.replace('/'); });
