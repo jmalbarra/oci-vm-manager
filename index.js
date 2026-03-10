@@ -69,6 +69,11 @@ app.get('/login.html', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'login.html'));
 });
 
+app.post('/login.html', (req, res) => {
+  // Si el form se envía sin JS (method=post, action=""), redirigir a GET
+  res.redirect('/login.html');
+});
+
 app.get('/', (req, res) => {
   if (!req.session?.user) return res.redirect('/login.html');
   res.sendFile(path.join(__dirname, 'public', 'dashboard.html'));
