@@ -48,7 +48,7 @@
     </section>
   </main>
   <script>
-    if (!sessionStorage.getItem('oci-vm-authed')) location.replace('/login.html');
+    // No chequear sessionStorage: el servidor ya protege / con sesión. sessionStorage provoca bucle / <-> /login.html
     const msg = (t, ok) => {
       const el = document.getElementById('msg');
       el.textContent = t;
