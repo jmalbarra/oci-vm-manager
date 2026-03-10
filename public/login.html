@@ -6,55 +6,43 @@
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <title>OCI VM Manager — Login</title>
   <link rel="stylesheet" href="/css/style.css">
+  <script src="/js/theme.js"></script>
 </head>
 <body class="login-page">
-  <div class="login-card">
+  <div class="login-wrap">
+    <button type="button" id="themeToggle" class="theme-toggle" title="Cambiar tema" style="position: absolute; top: 1rem; right: 1rem;">🌙</button>
+    <div class="login-card">
     <h1>OCI VM Manager</h1>
     <p>Administración de la VM compartida</p>
-    <form id="loginForm">
-      <div class="form-group">
-        <label>Email</label>
-        <input type="email" name="email" required placeholder="admin@ejemplo.com">
+    <div id="loginForm">
+      <div id="loginStep">
+        <div class="form-group">
+          <label>Email</label>
+          <input type="email" id="loginEmail" name="email" required placeholder="admin@ejemplo.com" autocomplete="email">
+        </div>
+        <div class="form-group">
+          <label>Contraseña</label>
+          <input type="password" id="loginPassword" name="password" required placeholder="••••••••" autocomplete="current-password">
+        </div>
+        <div id="loginError" class="error hidden"></div>
+        <button type="button" id="btnEntrar" class="btn btn-primary">Entrar</button>
       </div>
-      <div class="form-group">
-        <label>Contraseña</label>
-        <input type="password" name="password" required placeholder="••••••••">
+      <div id="tfaStep" class="hidden">
+        <p class="muted" style="margin-bottom: 1rem;">Ingresá el código de 6 dígitos de tu app de autenticación</p>
+        <div class="form-group">
+          <label>Código 2FA</label>
+          <input type="text" id="tfaCode" inputmode="numeric" pattern="[0-9]*" maxlength="8" placeholder="000000" autocomplete="one-time-code">
+        </div>
+        <div id="tfaError" class="error hidden"></div>
+        <button type="button" id="btnTfaVerify" class="btn btn-primary">Verificar</button>
+        <button type="button" id="btnTfaBack" class="btn btn-ghost" style="margin-left: 0.5rem;">Volver</button>
       </div>
-      <div id="loginError" class="error hidden"></div>
-      <button type="submit" class="btn btn-primary">Entrar</button>
-    </form>
+    </div>
+    </div>
+    <footer class="footer">
+      Hecho por <a href="https://github.com/jmalbarra" target="_blank" rel="noopener noreferrer">jmalbarra</a>
+    </footer>
   </div>
-  <footer class="footer">
-    Hecho por <a href="https://github.com/jmalbarra" target="_blank" rel="noopener noreferrer">jmalbarra</a>
-  </footer>
-  <script>
-    // Solo redirigir si hay sesión válida; evita bucle cuando sessionStorage dice "authed" pero el servidor ya expiró
-    fetch('/api/me').then(r => { if (r.ok) location.replace('/'); });
-    document.getElementById('loginForm').onsubmit = async (e) => {
-      e.preventDefault();
-      const err = document.getElementById('loginError');
-      err.classList.add('hidden');
-      const fd = new FormData(e.target);
-      try {
-        const res = await fetch('/api/login', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: fd.get('email'), password: fd.get('password') })
-        });
-        let data = {};
-        try { data = await res.json(); } catch (_) { data = { error: 'Respuesta inválida del servidor' }; }
-        if (!res.ok) {
-          err.textContent = data.error || (res.status === 429 ? 'Demasiados intentos. Esperá 15 min.' : 'Credenciales inválidas');
-          err.classList.remove('hidden');
-          return;
-        }
-        sessionStorage.setItem('oci-vm-authed', '1');
-        location.replace('/');
-      } catch (e) {
-        err.textContent = 'Error de conexión. Revisá la red e intentá de nuevo.';
-        err.classList.remove('hidden');
-      }
-    };
-  </script>
+  <script src="/js/login.js"></script>
 </body>
 </html>
