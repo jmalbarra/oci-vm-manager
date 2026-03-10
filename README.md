@@ -34,10 +34,10 @@ Abrí **http://localhost:3080** en el navegador.
 |--------|-------------|
 | ✏️ **Editar dominios** | Agregás/editás dominios con puerto y opción "Redirigir www" |
 | 🔵 **Previsualizar** | Abre el dominio en una pestaña nueva |
-| ✔️ **Verificar** | Luz verde si DNS y HTTPS OK; roja con tooltip del error. Si el manager corre en la misma VM, usa localhost (evita hairpin NAT). Con `OCI_HOST=127.0.0.1` podés agregar `OCI_PUBLIC_IP=IP_DE_TU_SERVIDOR` para que lo use directo |
+| ✔️ **Verificar** | Luz verde = Caddy configurado OK y visible desde internet (no 404). Roja = error con mensaje (ej. HTTP 404 → ¿la app está corriendo en el puerto?). Si el manager corre en la misma VM: `OCI_PUBLIC_IP` para usar localhost |
 | 🗑️ **Eliminar** | Borra un dominio (pide confirmar escribiendo el nombre) |
 | 💾 **Guardar** | Persiste la config en `config/sites.json` y `config/Caddyfile` |
-| 🚀 **Desplegar a VM** | Sube el Caddyfile por SSH, copia a `/etc/caddy/` y recarga Caddy |
+| 🚀 **Desplegar a VM** | Sube el Caddyfile por SSH, copia a `/etc/caddy/` y recarga Caddy. El deploy no borra `config/tfa.json` ni los backups |
 | 📦 **Backups** | Antes de cada deploy se guarda una copia. Elegí uno del menú para restaurar (ir atrás o adelante) |
 | 🔐 **2FA** | Autenticación en dos pasos (TOTP) con Google Authenticator, Authy, etc. |
 
