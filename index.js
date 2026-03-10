@@ -11,6 +11,7 @@ const { Client } = require('ssh2');
 const caddy = require('./src/caddy');
 
 const app = express();
+app.set('trust proxy', 1); // Para que las cookies funcionen detrás de Caddy/reverse proxy
 const PORT = process.env.PORT || 3080;
 const isProd = process.env.NODE_ENV === 'production';
 
@@ -42,10 +43,10 @@ app.use(helmet({
     : false,
 }));
 
-app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 100, standardHeaders: true, legacyHeaders: false }));
+app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 100, standardHeaders: true, legacyHeaders: false, validate: { xForwardedForHeader: false } }));
 
-const loginLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 5, message: { error: 'Demasiados intentos. Esperá 15 min.' } });
-const deployLimiter = rateLimit({ windowMs: 60 * 1000, max: 5, message: { error: 'Demasiados deploys. Esperá 1 min.' } });
+const loginLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 5, message: { error: 'Demasiados intentos. Esperá 15 min.' }, validate: { xForwardedForHeader: false } });
+const deployLimiter = rateLimit({ windowMs: 60 * 1000, max: 5, message: { error: 'Demasiados deploys. Esperá 1 min.' }, validate: { xForwardedForHeader: false } });
 
 app.use(express.json({ limit: '10kb' }));
 app.use(express.urlencoded({ extended: true, limit: '10kb' }));
@@ -114,7 +115,7 @@ app.get('/api/me', (req, res) => {
   res.json(req.session.user);
 });
 
-const checkDomainLimiter = rateLimit({ windowMs: 60 * 1000, max: 30, message: { ok: false } });
+const checkDomainLimiter = rateLimit({ windowMs: 60 * 1000, max: 30, message: { ok: false }, validate: { xForwardedForHeader: false } });
 app.get('/api/check-domain', requireAuth, checkDomainLimiter, (req, res) => {
   const domain = (req.query.domain || '').toString().trim().replace(/^https?:\/\//, '');
   if (!domain || domain.length > 253) return res.status(400).json({ ok: false, error: 'Dominio inválido' });
