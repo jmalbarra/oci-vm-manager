@@ -62,3 +62,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 .card-muted { background: #f8fafc; }
 .card-muted h3 { font-size: 0.95rem; margin-bottom: 0.5rem; color: #64748b; }
 #caddyPreview { background: #1e293b; color: #e2e8f0; padding: 1rem; border-radius: 8px; font-family: 'Monaco','Menlo',monospace; font-size: 0.8rem; overflow-x: auto; margin: 0; white-space: pre; }
+
+.footer { text-align: center; padding: 1rem; font-size: 0.85rem; color: #94a3b8; }
+.footer a { color: #64748b; text-decoration: none; }
+.footer a:hover { color: #475569; text-decoration: underline; }
+.login-page .footer { color: rgba(255,255,255,0.6); margin-top: 1.5rem; }
+.login-page .footer a { color: rgba(255,255,255,0.8); }
+.login-page .footer a:hover { color: #fff; }
