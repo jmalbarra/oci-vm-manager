@@ -1,0 +1,17 @@
+[
+  {
+    "domain": "oci-vm-manager.duckdns.org",
+    "port": 3080,
+    "redirectWww": true
+  },
+  {
+    "domain": "turnero-cobra.duckdns.org",
+    "port": 3000,
+    "redirectWww": true
+  },
+  {
+    "domain": "fauricarnes.duckdns.org",
+    "port": 3001,
+    "redirectWww": true
+  }
+]

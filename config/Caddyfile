@@ -1,0 +1,25 @@
+# OCI VM — Caddy multi-app (generado por OCI VM Manager)
+
+oci-vm-manager.duckdns.org {
+    reverse_proxy 127.0.0.1:3080
+}
+
+www.oci-vm-manager.duckdns.org {
+    redir https://oci-vm-manager.duckdns.org{uri} permanent
+}
+
+turnero-cobra.duckdns.org {
+    reverse_proxy 127.0.0.1:3000
+}
+
+www.turnero-cobra.duckdns.org {
+    redir https://turnero-cobra.duckdns.org{uri} permanent
+}
+
+fauricarnes.duckdns.org {
+    reverse_proxy 127.0.0.1:3001
+}
+
+www.fauricarnes.duckdns.org {
+    redir https://fauricarnes.duckdns.org{uri} permanent
+}
