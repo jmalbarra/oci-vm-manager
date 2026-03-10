@@ -37,6 +37,7 @@ function renderSite(site, i) {
     </div>
     <div class="site-status" data-idx="${i}">
       <span class="status-dot status-pending" title="Sin verificar"></span>
+      <span class="status-msg" aria-live="polite"></span>
       <button type="button" class="btn btn-ghost btn-check" data-idx="${i}" title="Verificar si responde">Verificar</button>
     </div>
     <div class="site-actions">
@@ -127,20 +128,26 @@ function render() {
 
 async function checkDomain(rowEl) {
   const domain = rowEl.querySelector('.site-domain')?.value?.trim();
+  const port = parseInt(rowEl.querySelector('.site-port')?.value, 10) || 3000;
   if (!domain) return;
   const statusEl = rowEl.querySelector('.status-dot');
+  const msgEl = rowEl.querySelector('.status-msg');
   const btnEl = rowEl.querySelector('.btn-check');
   statusEl.className = 'status-dot status-checking';
-  statusEl.title = 'Verificando…';
+  statusEl.title = '';
+  if (msgEl) msgEl.textContent = 'Verificando…';
   btnEl.disabled = true;
   try {
-    const r = await fetcho('/api/check-domain?domain=' + encodeURIComponent(domain));
+    const r = await fetcho('/api/check-domain?domain=' + encodeURIComponent(domain) + '&port=' + port);
     const d = await r.json();
     statusEl.className = 'status-dot ' + (d.ok ? 'status-ok' : 'status-fail');
-    statusEl.title = d.ok ? 'Funcionando — DNS apunta bien y responde OK' : (d.error || 'No responde');
+    statusEl.title = d.ok ? 'Caddy configurado y visible desde internet' : '';
+    if (msgEl) msgEl.textContent = d.ok ? 'Caddy OK, visible' : (d.error || 'No responde');
+    if (msgEl) msgEl.className = 'status-msg ' + (d.ok ? 'status-msg-ok' : 'status-msg-fail');
   } catch (_) {
     statusEl.className = 'status-dot status-fail';
-    statusEl.title = 'Error al verificar';
+    statusEl.title = '';
+    if (msgEl) { msgEl.textContent = 'Error al verificar'; msgEl.className = 'status-msg status-msg-fail'; }
   }
   btnEl.disabled = false;
 }

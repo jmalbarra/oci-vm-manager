@@ -234,7 +234,7 @@ async function validateHostForSSRF(host) {
     const family = net.isIP(h);
     if (family) return isPrivateIP(h) ? null : { ip: h, family, hostname: h };
     const [addr, fam] = await dns.lookup(h, { verbatim: true });
-    if (isPrivateIP(addr)) return null;
+    // Permitir IPs privadas: split-horizon DNS hace que duckdns.org etc resuelvan a 127.0.0.1 en la VM
     return { ip: addr, family: fam || 4, hostname: h };
   } catch (_) { return null; }
 }
@@ -249,13 +249,15 @@ function errToFriendly(msg) {
   return m || 'Error de conexión';
 }
 
-function doHttpsHead(host, hostname, lookup) {
+function doHttpsHead(host, hostname, lookup, portHint = ' en el puerto configurado') {
   return new Promise((resolve) => {
     const opts = { host, hostname, port: 443, path: '/', method: 'HEAD', servername: hostname };
     if (lookup) opts.lookup = lookup;
     const req = https.request(opts, (r) => {
       r.resume();
-      resolve({ ok: r.statusCode >= 200 && r.statusCode < 400, error: r.statusCode >= 400 ? `HTTP ${r.statusCode}` : null });
+      const ok = r.statusCode >= 200 && r.statusCode < 400;
+      const err = !ok ? (r.statusCode === 404 ? `HTTP 404 — ¿la app está corriendo${portHint}?` : `HTTP ${r.statusCode}`) : null;
+      resolve({ ok, error: err });
     });
     req.on('error', (err) => resolve({ ok: false, error: errToFriendly(err.message) }));
     req.on('timeout', () => { req.destroy(); resolve({ ok: false, error: 'Tiempo de espera agotado' }); });
@@ -267,6 +269,8 @@ function doHttpsHead(host, hostname, lookup) {
 const checkDomainLimiter = rateLimit({ windowMs: 60 * 1000, max: 30, message: { ok: false }, validate: { xForwardedForHeader: false } });
 app.get('/api/check-domain', requireAuth, checkDomainLimiter, async (req, res) => {
   const domain = (req.query.domain || '').toString().trim().replace(/^https?:\/\//, '').split(/[/?#]/)[0].split(':')[0];
+  const port = parseInt(req.query.port, 10);
+  const portHint = (port >= 1 && port <= 65535) ? ` en el puerto ${port}` : ' en el puerto configurado';
   if (!domain || domain.length > 253) return res.status(400).json({ ok: false, error: 'Dominio inválido' });
   const resolved = await validateHostForSSRF(domain);
   if (!resolved) return res.status(400).json({ ok: false, error: 'Dominio no permitido (SSRF)' });
@@ -277,13 +281,13 @@ app.get('/api/check-domain', requireAuth, checkDomainLimiter, async (req, res) =
   let result;
 
   if (isOurServer) {
-    result = await doHttpsHead('127.0.0.1', hostname, undefined);
+    result = await doHttpsHead('127.0.0.1', hostname, undefined, portHint);
   } else {
     const lookup = (h, opts, cb) => cb(null, ip, family);
-    result = await doHttpsHead(ip, hostname, lookup);
+    result = await doHttpsHead(ip, hostname, lookup, portHint);
     // Hairpin NAT: si falló (timeout/refused) y corremos en esta VM, reintentar con localhost
     if (!result.ok && (ociHost === '127.0.0.1' || ociHost === 'localhost' || !ociHost)) {
-      const retry = await doHttpsHead('127.0.0.1', hostname, undefined);
+      const retry = await doHttpsHead('127.0.0.1', hostname, undefined, portHint);
       if (retry.ok) result = retry;
     }
   }

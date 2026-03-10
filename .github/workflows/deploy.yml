@@ -28,6 +28,7 @@ jobs:
           rsync -avz --delete \
             --exclude 'node_modules' --exclude '.env' --exclude '.git' \
             --exclude 'config/sites.json' --exclude 'config/Caddyfile' \
+            --exclude 'config/tfa.json' --exclude 'config/security.log' --exclude 'config/backups' \
             -e "ssh -i ~/.ssh/id_ed25519" \
             ./ ubuntu@${{ secrets.SERVER_IP }}:/opt/oci-vm-manager/
 
