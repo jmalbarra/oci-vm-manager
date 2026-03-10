@@ -27,4 +27,8 @@ function logDeploy(result, error) {
   log(result === 'ok' ? 'info' : 'error', 'deploy', { result, error: error || undefined });
 }
 
-module.exports = { log, logLoginFail, logDeploy };
+function logCheckDomainFail(domain, reason, detail) {
+  log('warn', 'check_domain_ssrf_reject', { domain: (domain || '').slice(0, 50), reason, detail });
+}
+
+module.exports = { log, logLoginFail, logDeploy, logCheckDomainFail };

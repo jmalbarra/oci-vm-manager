@@ -226,17 +226,31 @@ function isDecimalOrHexPrivate(str) {
   return false;
 }
 async function validateHostForSSRF(host) {
-  const h = host.split(/[/?#]/)[0].split(':')[0].toLowerCase().replace(/^\[|\]$/g, '');
-  if (!h || h.length > 253) return null;
-  if (BLOCKED_HOSTNAMES.test(h)) return null;
-  if (isDecimalOrHexPrivate(h)) return null;
+  const raw = String(host || '').split(/[/?#]/)[0].split(':')[0].toLowerCase().replace(/^\[|\]$/g, '').replace(/\.+$/, '');
+  const h = raw.trim();
+  if (!h || h.length > 253) return { err: 'empty_or_long' };
+  if (BLOCKED_HOSTNAMES.test(h)) return { err: 'blocked_hostname', host: h };
+  if (isDecimalOrHexPrivate(h)) return { err: 'decimal_hex_private' };
   try {
     const family = net.isIP(h);
-    if (family) return isPrivateIP(h) ? null : { ip: h, family, hostname: h };
-    const [addr, fam] = await dns.lookup(h, { verbatim: true });
-    // Permitir IPs privadas: split-horizon DNS hace que duckdns.org etc resuelvan a 127.0.0.1 en la VM
+    if (family) return isPrivateIP(h) ? { err: 'private_ip' } : { ip: h, family, hostname: h };
+    let result;
+    try {
+      result = await dns.lookup(h, { verbatim: true });
+    } catch (dnsErr) {
+      try {
+        result = await dns.lookup(h, { all: false });
+      } catch (e2) {
+        return { err: 'dns_failed', detail: (dnsErr && dnsErr.message) || 'unknown' };
+      }
+    }
+    // dns.promises.lookup devuelve { address, family }, NO array
+    const addr = result && result.address;
+    const fam = result && result.family;
     return { ip: addr, family: fam || 4, hostname: h };
-  } catch (_) { return null; }
+  } catch (e) {
+    return { err: 'unexpected', detail: (e && e.message) || 'unknown' };
+  }
 }
 
 function errToFriendly(msg) {
@@ -273,7 +287,20 @@ app.get('/api/check-domain', requireAuth, checkDomainLimiter, async (req, res) =
   const portHint = (port >= 1 && port <= 65535) ? ` en el puerto ${port}` : ' en el puerto configurado';
   if (!domain || domain.length > 253) return res.status(400).json({ ok: false, error: 'Dominio inválido' });
   const resolved = await validateHostForSSRF(domain);
-  if (!resolved) return res.status(400).json({ ok: false, error: 'Dominio no permitido (SSRF)' });
+  if (resolved.err) {
+    const debug = process.env.DEBUG_CHECK_DOMAIN === '1';
+    const errMsg = resolved.err === 'blocked_hostname' ? `Host bloqueado: ${resolved.host}` :
+      resolved.err === 'dns_failed' ? `DNS falló: ${resolved.detail}` :
+      resolved.err === 'private_ip' ? 'IP privada como entrada directa' :
+      resolved.err === 'decimal_hex_private' ? 'Formato de IP no permitido' :
+      'Dominio no permitido (SSRF)';
+    logger.logCheckDomainFail(domain, resolved.err, resolved.detail || resolved.host);
+    return res.status(400).json({
+      ok: false,
+      error: errMsg,
+      ...(debug && { debug: resolved }),
+    });
+  }
   const { ip, family, hostname } = resolved;
   const ociHost = process.env.OCI_HOST?.trim();
   const ociPublicIp = process.env.OCI_PUBLIC_IP?.trim();

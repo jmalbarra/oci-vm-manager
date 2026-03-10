@@ -43,7 +43,7 @@ function renderSite(site, i) {
     </div>
     <div class="site-meta">
       <div class="site-actions">
-        <button type="button" class="btn btn-ghost btn-check" data-idx="${i}" title="Verificar si responde">Verificar</button>
+        <button type="button" class="btn btn-check" data-idx="${i}" title="Verificar si responde">Verificar</button>
         <button type="button" class="btn btn-secondary btn-preview" data-idx="${i}">Previsualizar</button>
         <button type="button" class="btn btn-ghost btn-remove" data-idx="${i}">Eliminar</button>
       </div>
