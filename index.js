@@ -11,6 +11,9 @@ const bcrypt = require('bcryptjs');
 const https = require('https');
 const { Client } = require('ssh2');
 const caddy = require('./src/caddy');
+const backups = require('./src/backups');
+const logger = require('./src/logger');
+const tfa = require('./src/tfa');
 
 const app = express();
 app.set('trust proxy', 1); // Para que las cookies funcionen detrás de Caddy/reverse proxy
@@ -111,10 +114,21 @@ app.post('/api/login', loginLimiter, (req, res) => {
     return res.status(400).json({ error: 'Datos inválidos' });
   }
   if (email.trim().toLowerCase() !== expectedEmail.toLowerCase()) {
+    logger.logLoginFail(email);
     return res.status(401).json({ error: 'Credenciales inválidas' });
   }
   if (!bcrypt.compareSync(password, expectedHash)) {
+    logger.logLoginFail(email);
     return res.status(401).json({ error: 'Credenciales inválidas' });
+  }
+
+  if (tfa.is2faEnabled()) {
+    req.session.regenerate((err) => {
+      if (err) return res.status(500).json({ error: 'Error de sesión' });
+      req.session.pending2fa = { email: expectedEmail };
+      res.json({ requires2fa: true });
+    });
+    return;
   }
 
   req.session.regenerate((err) => {
@@ -122,6 +136,54 @@ app.post('/api/login', loginLimiter, (req, res) => {
     req.session.user = { email: expectedEmail };
     res.json({ ok: true });
   });
+});
+
+app.post('/api/2fa/verify', loginLimiter, (req, res) => {
+  const { code } = req.body || {};
+  if (!req.session?.pending2fa || !code || typeof code !== 'string') {
+    return res.status(401).json({ error: 'Código inválido' });
+  }
+  if (!tfa.verifyToken(code)) {
+    logger.logLoginFail(req.session.pending2fa.email);
+    return res.status(401).json({ error: 'Código inválido o expirado' });
+  }
+  const email = req.session.pending2fa.email;
+  delete req.session.pending2fa;
+  req.session.user = { email };
+  res.json({ ok: true });
+});
+
+app.get('/api/2fa/status', requireAuth, (req, res) => {
+  res.json({ enabled: tfa.is2faEnabled() });
+});
+
+app.post('/api/2fa/setup', requireAuth, async (req, res) => {
+  if (tfa.is2faEnabled()) return res.status(400).json({ error: '2FA ya está activo' });
+  const email = req.session?.user?.email || process.env.ADMIN_EMAIL || 'admin';
+  const secret = tfa.generateSecret(email);
+  tfa.saveTfaSecret(secret, false);
+  const qr = await tfa.getQRDataUrl(secret);
+  res.json({ qr, secret: secret.base32 });
+});
+
+app.post('/api/2fa/confirm', requireAuth, (req, res) => {
+  if (tfa.is2faEnabled()) return res.status(400).json({ error: '2FA ya está activo' });
+  const { code } = req.body || {};
+  const cfg = tfa.getTfaConfig();
+  if (!cfg?.secret) return res.status(400).json({ error: 'Ejecutá setup primero' });
+  if (!tfa.verifyToken(code)) return res.status(401).json({ error: 'Código inválido' });
+  tfa.enable2fa({ base32: cfg.secret });
+  res.json({ ok: true });
+});
+
+app.post('/api/2fa/disable', requireAuth, (req, res) => {
+  const { password } = req.body || {};
+  const expectedHash = process.env.ADMIN_PASSWORD_HASH;
+  if (!expectedHash || !bcrypt.compareSync(password || '', expectedHash)) {
+    return res.status(401).json({ error: 'Contraseña incorrecta' });
+  }
+  tfa.disable2fa();
+  res.json({ ok: true });
 });
 
 app.post('/api/logout', (req, res) => {
@@ -243,23 +305,46 @@ app.put('/api/sites', requireAuth, (req, res) => {
   }
 });
 
+app.get('/api/backups', requireAuth, (req, res) => {
+  try {
+    res.json({ backups: backups.listBackups() });
+  } catch (e) {
+    res.status(500).json({ error: safeError(e, 'Error al listar backups') });
+  }
+});
+
+app.post('/api/backups/restore', requireAuth, (req, res) => {
+  const { id } = req.body || {};
+  if (!id || typeof id !== 'string') return res.status(400).json({ error: 'Backup inválido' });
+  if (!backups.restoreBackup(id)) return res.status(400).json({ error: 'Backup no encontrado' });
+  res.json({ ok: true });
+});
+
 app.post('/api/caddy/deploy', requireAuth, deployLimiter, async (req, res) => {
   const host = process.env.OCI_HOST;
   const isLocal = !host || host === '127.0.0.1' || host === 'localhost';
 
+  let content;
+  try {
+    content = fs.readFileSync(caddy.CADDYFILE_PATH, 'utf8');
+  } catch (e) {
+    return res.status(400).json({ error: 'No hay Caddyfile. Guardá los sitios primero.' });
+  }
+
+  try {
+    backups.createBackup(content);
+    backups.pruneOldBackups();
+  } catch (_) {}
+
   if (isLocal) {
     try {
-      let content;
-      try {
-        content = fs.readFileSync(caddy.CADDYFILE_PATH, 'utf8');
-      } catch (e) {
-        return res.status(400).json({ error: 'No hay Caddyfile. Guardá los sitios primero.' });
-      }
       fs.writeFileSync('/tmp/caddyfile-deploy', content);
       const { execSync } = require('child_process');
       execSync('sudo cp /tmp/caddyfile-deploy /etc/caddy/Caddyfile && sudo systemctl reload caddy');
+      logger.logDeploy('ok');
       return res.json({ ok: true });
     } catch (e) {
+      logger.logDeploy('fail', safeError(e, 'Deploy falló'));
       return res.status(500).json({ error: safeError(e, 'Deploy falló') });
     }
   }
@@ -272,13 +357,6 @@ app.post('/api/caddy/deploy', requireAuth, deployLimiter, async (req, res) => {
   let key = keyContent;
   if (!key && keyPath && fs.existsSync(keyPath)) key = fs.readFileSync(keyPath, 'utf8');
   if (!key) return res.status(500).json({ error: 'Configurar OCI_SSH_KEY_PATH o OCI_SSH_PRIVATE_KEY' });
-
-  let content;
-  try {
-    content = fs.readFileSync(caddy.CADDYFILE_PATH, 'utf8');
-  } catch (e) {
-    return res.status(400).json({ error: 'No hay Caddyfile. Guardá los sitios primero.' });
-  }
 
   const b64 = Buffer.from(content, 'utf8').toString('base64');
   const conn = new Client();
@@ -297,12 +375,16 @@ app.post('/api/caddy/deploy', requireAuth, deployLimiter, async (req, res) => {
         clearTimeout(sshTimeout);
         conn.end();
         if (res.headersSent) return;
-        if (code !== 0) return res.status(500).json({ error: isProd ? 'Deploy falló' : (stderr || 'Deploy falló') });
+        if (code !== 0) {
+          logger.logDeploy('fail', stderr || 'Deploy falló');
+          return res.status(500).json({ error: isProd ? 'Deploy falló' : (stderr || 'Deploy falló') });
+        }
+        logger.logDeploy('ok');
         res.json({ ok: true });
       });
     });
   }).connect({ host, port: 22, username: user, privateKey: key });
-  conn.on('error', (err) => { clearTimeout(sshTimeout); sendErr(safeError(err, 'Deploy falló')); });
+  conn.on('error', (err) => { clearTimeout(sshTimeout); logger.logDeploy('fail', err.message); sendErr(safeError(err, 'Deploy falló')); });
 });
 
 app.listen(PORT, '0.0.0.0', () => {

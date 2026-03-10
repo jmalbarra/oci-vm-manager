@@ -38,6 +38,8 @@ Abrí **http://localhost:3080** en el navegador.
 | 🗑️ **Eliminar** | Borra un dominio (pide confirmar escribiendo el nombre) |
 | 💾 **Guardar** | Persiste la config en `config/sites.json` y `config/Caddyfile` |
 | 🚀 **Desplegar a VM** | Sube el Caddyfile por SSH, copia a `/etc/caddy/` y recarga Caddy |
+| 📦 **Backups** | Antes de cada deploy se guarda una copia. Elegí uno del menú para restaurar (ir atrás o adelante) |
+| 🔐 **2FA** | Autenticación en dos pasos (TOTP) con Google Authenticator, Authy, etc. |
 
 ---
 
@@ -95,7 +97,10 @@ OCI_SSH_PRIVATE_KEY=-----BEGIN OPENSSH PRIVATE KEY-----
 oci-vm-manager/
 ├── config/
 │   ├── sites.json    ← Config de dominios (generado)
-│   └── Caddyfile    ← Generado desde sites.json
+│   ├── Caddyfile     ← Generado desde sites.json
+│   ├── backups/      ← Copias del Caddyfile antes de cada deploy
+│   ├── tfa.json      ← Config 2FA (generado al activar)
+│   └── security.log  ← Log de intentos de login fallidos y deploys
 ├── public/
 │   ├── css/          ← Estilos
 │   ├── js/           ← login.js, dashboard.js (CSP exige scripts externos)
@@ -135,6 +140,18 @@ oci-vm-manager/
 - **SSRF**: `/api/check-domain` bloquea localhost, IPs privadas, metadata (169.254.x), .local, .internal, IP decimal/hex (2130706433, 0x7f…); conexión fijada al IP resuelto (anti DNS rebinding)
 - **CSRF**: peticiones POST/PUT/DELETE exigen header `X-Requested-With` (envío desde nuestro frontend)
 - **Producción**: `SESSION_SECRET` obligatorio; `FORCE_SECURE_COOKIE=1` detrás de HTTPS
+- **2FA**: TOTP opcional desde el dashboard
+- **Logs**: `config/security.log` — intentos de login fallidos y deploys
+- **Backups**: 30 últimos Caddyfiles en `config/backups/` con fecha y hora
+- **Deploy SSH**: timeout 30s para evitar colgados
+
+### Rotación de secretos (recomendado periódicamente)
+
+| Secreto | Frecuencia | Cómo |
+|---------|------------|------|
+| `SESSION_SECRET` | Cada 3–6 meses | Nuevo string random 32+ chars → actualizar `.env` → reiniciar app |
+| `ADMIN_PASSWORD_HASH` | Cada 6–12 meses | `node -e "console.log(require('bcryptjs').hashSync('nueva-pass', 10))"` → actualizar `.env` |
+| Llave SSH | Según política | Generar nueva, agregar al servidor, actualizar `OCI_SSH_KEY_PATH` o `OCI_SSH_PRIVATE_KEY` |
 
 ---
 

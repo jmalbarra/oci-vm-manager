@@ -6,11 +6,13 @@
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <title>OCI VM Manager — Dashboard</title>
   <link rel="stylesheet" href="/css/style.css">
+  <script src="/js/theme.js"></script>
 </head>
 <body class="dashboard-page">
   <header class="header">
     <h1>OCI VM Manager</h1>
     <div class="header-actions">
+      <button type="button" id="themeToggle" class="btn btn-ghost theme-toggle" title="Cambiar tema">🌙</button>
       <span id="userEmail" class="muted"></span>
       <button id="btnLogout" class="btn btn-ghost">Cerrar sesión</button>
     </div>
@@ -46,6 +48,37 @@
     <section class="card card-muted">
       <h3>Vista previa (Caddyfile generado)</h3>
       <pre id="caddyPreview"></pre>
+    </section>
+    <section class="card">
+      <h2>Backups del Caddyfile</h2>
+      <p class="muted">Antes de cada deploy se guarda una copia. Elegí uno para restaurar (ir atrás o adelante en el historial).</p>
+      <div class="backup-actions">
+        <select id="backupSelect">
+          <option value="">— Elegir backup —</option>
+        </select>
+        <button type="button" id="btnRestore" class="btn btn-secondary" disabled>Restaurar este backup</button>
+      </div>
+      <div id="backupMsg" class="msg hidden"></div>
+    </section>
+    <section class="card" id="tfaCard">
+      <h2>Autenticación en dos pasos (2FA)</h2>
+      <p class="muted" id="tfaStatusText">Cargando…</p>
+      <div id="tfaSetup" class="hidden">
+        <p class="muted" style="margin-bottom: 0.75rem;">Escaneá el QR con Google Authenticator, Authy o similar:</p>
+        <div id="tfaQR"></div>
+        <p class="muted" style="margin: 0.75rem 0 0.5rem; font-size: 0.85rem;">Luego ingresá el código para activar:</p>
+        <div class="form-group" style="max-width: 180px;">
+          <input type="text" id="tfaConfirmCode" placeholder="000000" inputmode="numeric" maxlength="8">
+        </div>
+        <button type="button" id="btnTfaConfirm" class="btn btn-primary">Activar 2FA</button>
+      </div>
+      <div id="tfaDisable" class="hidden">
+        <div class="form-group" style="max-width: 240px; margin-top: 0.5rem;">
+          <label>Contraseña para desactivar</label>
+          <input type="password" id="tfaDisablePassword" placeholder="••••••••">
+        </div>
+        <button type="button" id="btnTfaDisable" class="btn btn-ghost" style="color: #dc2626;">Desactivar 2FA</button>
+      </div>
     </section>
   </main>
   <footer class="footer">

@@ -178,10 +178,86 @@ document.getElementById('modalDeleteConfirm').onkeydown = (e) => {
   if (e.key === 'Escape') hideDeleteModal();
 };
 
+document.getElementById('themeToggle').onclick = () => {
+  const isDark = window.ociTheme.toggle() === 'dark';
+  document.getElementById('themeToggle').textContent = isDark ? '☀️' : '🌙';
+  document.getElementById('themeToggle').title = isDark ? 'Modo claro' : 'Modo oscuro';
+};
+(function setToggleIcon() {
+  const isDark = window.ociTheme?.get() === 'dark';
+  const el = document.getElementById('themeToggle');
+  if (el) { el.textContent = isDark ? '☀️' : '🌙'; el.title = isDark ? 'Modo claro' : 'Modo oscuro'; }
+})();
+
 document.getElementById('btnLogout').onclick = async () => {
   await fetcho('/api/logout', { method: 'POST' });
   sessionStorage.removeItem('oci-vm-authed');
   location.replace('/login.html');
+};
+
+function loadBackups() {
+  fetcho('/api/backups').then(checkAuth).then(r => r && r.json()).then(d => {
+    const sel = document.getElementById('backupSelect');
+    sel.innerHTML = '<option value="">— Elegir backup —</option>';
+    (d?.backups || []).forEach(b => {
+      const opt = document.createElement('option');
+      opt.value = b.id;
+      opt.textContent = b.label + ' (' + b.id + ')';
+      sel.appendChild(opt);
+    });
+    sel.onchange = () => { document.getElementById('btnRestore').disabled = !sel.value; };
+  });
+}
+
+document.getElementById('btnRestore').onclick = async () => {
+  const id = document.getElementById('backupSelect').value;
+  if (!id) return;
+  const label = document.getElementById('backupSelect').selectedOptions[0]?.textContent || id;
+  if (!confirm('¿Restaurar este backup?\n\n' + label + '\n\nSe reemplazará la configuración actual.')) return;
+  const res = await fetcho('/api/backups/restore', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) });
+  const d = await res.json();
+  const el = document.getElementById('backupMsg');
+  el.classList.remove('hidden');
+  el.className = 'msg ' + (res.ok ? 'success' : 'error');
+  el.textContent = res.ok ? 'Backup restaurado. Recargando…' : (d.error || 'Error');
+  if (res.ok) setTimeout(() => location.reload(), 1000);
+};
+
+function loadTfaStatus() {
+  fetcho('/api/2fa/status').then(checkAuth).then(r => r && r.json()).then(d => {
+    const enabled = d?.enabled;
+    document.getElementById('tfaStatusText').textContent = enabled ? '2FA activo. Tu cuenta está más segura.' : '2FA no configurado. Configuralo para mayor seguridad.';
+    document.getElementById('tfaSetup').classList.toggle('hidden', !!enabled);
+    document.getElementById('tfaDisable').classList.toggle('hidden', !enabled);
+    if (!enabled) startTfaSetup();
+  });
+}
+
+function startTfaSetup() {
+  fetcho('/api/2fa/setup', { method: 'POST' }).then(checkAuth).then(r => r && r.json()).then(d => {
+    if (d?.qr) {
+      const img = document.createElement('img');
+      img.src = d.qr;
+      img.alt = 'QR 2FA';
+      document.getElementById('tfaQR').innerHTML = '';
+      document.getElementById('tfaQR').appendChild(img);
+    }
+  });
+}
+
+document.getElementById('btnTfaConfirm').onclick = async () => {
+  const code = document.getElementById('tfaConfirmCode').value.trim();
+  if (!code) { msg('Ingresá el código', false); return; }
+  const res = await fetcho('/api/2fa/confirm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code }) });
+  const d = await res.json();
+  if (res.ok) { msg('2FA activado', true); loadTfaStatus(); } else msg(d.error || 'Error', false);
+};
+
+document.getElementById('btnTfaDisable').onclick = async () => {
+  const password = document.getElementById('tfaDisablePassword').value;
+  const res = await fetcho('/api/2fa/disable', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password }) });
+  const d = await res.json();
+  if (res.ok) { msg('2FA desactivado', true); loadTfaStatus(); } else msg(d.error || 'Error', false);
 };
 
 fetcho('/api/sites').then(checkAuth).then(r => r && r.json()).then(d => {
@@ -189,3 +265,5 @@ fetcho('/api/sites').then(checkAuth).then(r => r && r.json()).then(d => {
   else sites = [{ domain: 'turnero-cobra.duckdns.org', port: 3000, redirectWww: true }, { domain: 'fauricarnes.duckdns.org', port: 3001, redirectWww: true }];
   render();
 });
+loadBackups();
+loadTfaStatus();

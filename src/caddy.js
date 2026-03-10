@@ -89,4 +89,13 @@ function saveSites(sites) {
   fs.writeFileSync(CADDYFILE_PATH, generateCaddyfile(sites));
 }
 
-module.exports = { getSites, saveSites, generateCaddyfile, CADDYFILE_PATH };
+function restoreFromCaddyfile(content) {
+  const sites = parseCaddyfile(content);
+  if (!sites) return;
+  const dir = path.dirname(SITES_PATH);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(CADDYFILE_PATH, content);
+  fs.writeFileSync(SITES_PATH, JSON.stringify(sites, null, 2));
+}
+
+module.exports = { getSites, saveSites, generateCaddyfile, restoreFromCaddyfile, parseCaddyfile, CADDYFILE_PATH };
