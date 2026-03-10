@@ -48,12 +48,21 @@
     const container = document.getElementById('sitesList');
     const preview = document.getElementById('caddyPreview');
 
+    function esc(s) {
+      if (s == null) return '';
+      return String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
     function renderSite(site, i) {
       const div = document.createElement('div');
       div.className = 'site-row';
       div.innerHTML = `
         <div class="site-fields">
-          <input type="text" class="site-domain" placeholder="dominio.ejemplo.com" value="${(site.domain || '').replace(/"/g, '&quot;')}">
+          <input type="text" class="site-domain" placeholder="dominio.ejemplo.com" value="${esc(site.domain || '')}">
           <input type="number" class="site-port" placeholder="3000" min="1" max="65535" value="${site.port || 3000}">
           <label class="site-www">
             <input type="checkbox" class="site-redirect-www" ${site.redirectWww ? 'checked' : ''}>

@@ -3,12 +3,21 @@ const path = require('path');
 const fs = require('fs');
 const express = require('express');
 const session = require('express-session');
+const rateLimit = require('express-rate-limit');
+const helmet = require('helmet');
 const bcrypt = require('bcryptjs');
 const { Client } = require('ssh2');
 const caddy = require('./src/caddy');
 
 const app = express();
 const PORT = process.env.PORT || 3080;
+const isProd = process.env.NODE_ENV === 'production';
+
+const sessionSecret = process.env.SESSION_SECRET;
+if (isProd && (!sessionSecret || sessionSecret === 'change-me-in-production')) {
+  console.error('Fatal: SESSION_SECRET debe estar configurado en producción');
+  process.exit(1);
+}
 
 function requireAuth(req, res, next) {
   if (req.session?.user) return next();
@@ -16,14 +25,42 @@ function requireAuth(req, res, next) {
   return res.redirect('/login.html');
 }
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'"],
+      connectSrc: ["'self'"],
+      frameAncestors: ["'none'"],
+    },
+  },
+  hsts: process.env.FORCE_SECURE_COOKIE === '1'
+    ? { maxAge: 31536000, includeSubDomains: true, preload: true }
+    : false,
+}));
+
+app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 100, standardHeaders: true, legacyHeaders: false }));
+
+const loginLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 5, message: { error: 'Demasiados intentos. Esperá 15 min.' } });
+const deployLimiter = rateLimit({ windowMs: 60 * 1000, max: 5, message: { error: 'Demasiados deploys. Esperá 1 min.' } });
+
+app.use(express.json({ limit: '10kb' }));
+app.use(express.urlencoded({ extended: true, limit: '10kb' }));
 app.use(express.static(path.join(__dirname, 'public')));
+
 app.use(session({
-  secret: process.env.SESSION_SECRET || 'change-me-in-production',
+  secret: sessionSecret || 'dev-secret-change-in-prod',
   resave: false,
   saveUninitialized: false,
-  cookie: { secure: false, httpOnly: true, maxAge: 24 * 60 * 60 * 1000 }
+  name: 'oci-vm-manager.sid',
+  cookie: {
+    httpOnly: true,
+    secure: process.env.FORCE_SECURE_COOKIE === '1',
+    sameSite: 'lax',
+    maxAge: 24 * 60 * 60 * 1000,
+  },
 }));
 
 app.get('/login.html', (req, res) => {
@@ -36,13 +73,16 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'dashboard.html'));
 });
 
-app.post('/api/login', (req, res) => {
+app.post('/api/login', loginLimiter, (req, res) => {
   const { email, password } = req.body || {};
   const expectedEmail = process.env.ADMIN_EMAIL || 'jmalbarracinhc@gmail.com';
   const expectedHash = process.env.ADMIN_PASSWORD_HASH;
 
   if (!expectedHash || !email || !password) {
     return res.status(400).json({ error: 'Email y contraseña requeridos' });
+  }
+  if (typeof email !== 'string' || typeof password !== 'string') {
+    return res.status(400).json({ error: 'Datos inválidos' });
   }
   if (email.trim().toLowerCase() !== expectedEmail.toLowerCase()) {
     return res.status(401).json({ error: 'Credenciales inválidas' });
@@ -51,8 +91,11 @@ app.post('/api/login', (req, res) => {
     return res.status(401).json({ error: 'Credenciales inválidas' });
   }
 
-  req.session.user = { email: expectedEmail };
-  res.json({ ok: true });
+  req.session.regenerate((err) => {
+    if (err) return res.status(500).json({ error: 'Error de sesión' });
+    req.session.user = { email: expectedEmail };
+    res.json({ ok: true });
+  });
 });
 
 app.post('/api/logout', (req, res) => {
@@ -73,20 +116,38 @@ app.get('/api/sites', requireAuth, (req, res) => {
   }
 });
 
+const DOMAIN_REGEX = /^[a-zA-Z0-9][a-zA-Z0-9.-]{0,251}[a-zA-Z0-9]$|^[a-zA-Z0-9]$/;
+function validateSites(sites) {
+  if (!Array.isArray(sites) || sites.length > 50) return 'sites debe ser un array (máx 50)';
+  for (const s of sites) {
+    if (!s || typeof s !== 'object') return 'Cada sitio debe ser un objeto';
+    if (typeof s.domain !== 'string' || s.domain.length > 253) return 'domain inválido';
+    const domain = s.domain.trim();
+    if (!domain || !DOMAIN_REGEX.test(domain)) return `Dominio inválido: ${domain}`;
+    const port = typeof s.port === 'number' ? s.port : parseInt(s.port, 10);
+    if (isNaN(port) || port < 1 || port > 65535) return `Puerto inválido: ${s.port}`;
+  }
+  return null;
+}
+
 app.put('/api/sites', requireAuth, (req, res) => {
   const { sites } = req.body || {};
-  if (!Array.isArray(sites)) return res.status(400).json({ error: 'sites requerido (array)' });
-  const valid = sites.every(s => s && typeof s.domain === 'string' && typeof s.port === 'number');
-  if (!valid) return res.status(400).json({ error: 'Cada sitio debe tener domain (string) y port (number)' });
+  const err = validateSites(sites);
+  if (err) return res.status(400).json({ error: err });
+  const sanitized = sites.map(s => ({
+    domain: s.domain.trim(),
+    port: Math.floor(typeof s.port === 'number' ? s.port : parseInt(s.port, 10)),
+    redirectWww: Boolean(s.redirectWww),
+  }));
   try {
-    caddy.saveSites(sites);
+    caddy.saveSites(sanitized);
     res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
 });
 
-app.post('/api/caddy/deploy', requireAuth, async (req, res) => {
+app.post('/api/caddy/deploy', requireAuth, deployLimiter, async (req, res) => {
   const host = process.env.OCI_HOST;
   const isLocal = !host || host === '127.0.0.1' || host === 'localhost';
 

@@ -53,12 +53,17 @@ function parseCaddyfile(content) {
   return sites.length ? sites : null;
 }
 
+const SAFE_DOMAIN = /^[a-zA-Z0-9][a-zA-Z0-9.-]*[a-zA-Z0-9]$|^[a-zA-Z0-9]$/;
+
 function generateCaddyfile(sites) {
   let out = '# OCI VM — Caddy multi-app (generado por OCI VM Manager)\n\n';
   for (const { domain, port, redirectWww } of sites) {
-    out += `${domain} {\n    reverse_proxy 127.0.0.1:${port}\n}\n\n`;
+    const d = String(domain || '').trim();
+    const p = Math.floor(Number(port)) || 3000;
+    if (!d || !SAFE_DOMAIN.test(d) || p < 1 || p > 65535) continue;
+    out += `${d} {\n    reverse_proxy 127.0.0.1:${p}\n}\n\n`;
     if (redirectWww) {
-      out += `www.${domain} {\n    redir https://${domain}{uri} permanent\n}\n\n`;
+      out += `www.${d} {\n    redir https://${d}{uri} permanent\n}\n\n`;
     }
   }
   return out.trim();

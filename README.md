@@ -102,6 +102,30 @@ oci-vm-manager/
 
 ---
 
+## 🔒 Seguridad
+
+- **Rate limiting**: 5 intentos de login / 15 min; 5 deploys / min; 100 req / 15 min global
+- **Helmet**: CSP, X-Frame-Options, etc.
+- **Validación estricta**: dominios (hostname válido), puertos (1-65535)
+- **Session**: regeneración en login, SameSite=Lax, httpOnly
+- **XSS**: escape de HTML en el dashboard
+- **Producción**: `SESSION_SECRET` obligatorio; `FORCE_SECURE_COOKIE=1` detrás de HTTPS
+
+---
+
+## 🚀 Deploy automático (GitHub Actions)
+
+Cada merge a `main` despliega el manager y actualiza Caddy en el servidor.
+
+**Secrets en GitHub** (Settings → Secrets → Actions):
+
+| Secret | Descripción |
+|--------|-------------|
+| `SSH_PRIVATE_KEY` | Llave privada SSH para el servidor |
+| `SERVER_IP` | IP del servidor (ej: 137.131.152.248) |
+
+---
+
 ## 📌 Resumen
 
 1. **Primera vez:** `cp .env.example .env` y editá lo necesario
