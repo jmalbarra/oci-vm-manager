@@ -73,6 +73,14 @@ OCI_SSH_PRIVATE_KEY=-----BEGIN OPENSSH PRIVATE KEY-----
 > ❌ **Error típico:** "Configurar OCI_SSH_KEY_PATH o OCI_SSH_PRIVATE_KEY"  
 > → No encontró la llave. Revisá que el path sea correcto y que el archivo exista.
 
+### Resumen: qué hay que configurar
+
+| Dónde | Qué |
+|-------|-----|
+| **Servidor** (`/opt/oci-vm-manager/.env`) | `ADMIN_EMAIL`, `ADMIN_PASSWORD_HASH`, `SESSION_SECRET`, `OCI_HOST`, `OCI_USER`, `OCI_SSH_KEY_PATH` (o `OCI_SSH_PRIVATE_KEY`) |
+| **GitHub Actions** (Secrets) | `SSH_PRIVATE_KEY`, `SERVER_IP` |
+| **Local** (para desarrollar) | `cp .env.example .env` → mismo esquema que servidor |
+
 ---
 
 ## 🏗️ Estructura del proyecto
@@ -115,14 +123,24 @@ oci-vm-manager/
 
 ## 🚀 Deploy automático (GitHub Actions)
 
-Cada merge a `main` despliega el manager y actualiza Caddy en el servidor.
+Cada merge a `main` despliega el manager al servidor. Workflow: `.github/workflows/deploy.yml`.
 
-**Secrets en GitHub** (Settings → Secrets → Actions):
+### Secrets en GitHub (Settings → Secrets and variables → Actions)
 
-| Secret | Descripción |
-|--------|-------------|
-| `SSH_PRIVATE_KEY` | Llave privada SSH para el servidor |
-| `SERVER_IP` | IP del servidor (ej: 137.131.152.248) |
+| Secret | Valor | Obligatorio |
+|--------|-------|-------------|
+| `SSH_PRIVATE_KEY` | Contenido completo de la llave privada SSH | Sí |
+| `SERVER_IP` | IP del servidor (ej: `137.131.152.248`) | Sí |
+
+### Si falla el push de archivos en `.github/workflows/`
+
+GitHub exige el scope `workflow` para modificar workflows. Si el push rechaza:
+
+```bash
+gh auth refresh -s workflow
+# Abrí la URL en el navegador, autorizá, y después:
+git push origin tu-rama
+```
 
 ---
 
