@@ -34,7 +34,7 @@ Abrí **http://localhost:3080** en el navegador.
 |--------|-------------|
 | ✏️ **Editar dominios** | Agregás/editás dominios con puerto y opción "Redirigir www" |
 | 🔵 **Previsualizar** | Abre el dominio en una pestaña nueva |
-| ✔️ **Verificar** | Comprueba si el dominio responde (luz verde/roja) |
+| ✔️ **Verificar** | Comprueba si el dominio responde (luz verde/roja). Cuando el manager corre en la misma VM, usa localhost para evitar hairpin NAT |
 | 🗑️ **Eliminar** | Borra un dominio (pide confirmar escribiendo el nombre) |
 | 💾 **Guardar** | Persiste la config en `config/sites.json` y `config/Caddyfile` |
 | 🚀 **Desplegar a VM** | Sube el Caddyfile por SSH, copia a `/etc/caddy/` y recarga Caddy |

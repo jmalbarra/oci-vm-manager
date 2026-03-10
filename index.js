@@ -51,7 +51,7 @@ app.use(helmet({
       defaultSrc: ["'self'"],
       scriptSrc: ["'self'"],
       styleSrc: ["'self'", "'unsafe-inline'"],
-      imgSrc: ["'self'"],
+      imgSrc: ["'self'", "data:"],
       connectSrc: ["'self'"],
       frameAncestors: ["'none'"],
     },
@@ -245,18 +245,21 @@ app.get('/api/check-domain', requireAuth, checkDomainLimiter, async (req, res) =
   if (!domain || domain.length > 253) return res.status(400).json({ ok: false, error: 'Dominio inválido' });
   const resolved = await validateHostForSSRF(domain);
   if (!resolved) return res.status(400).json({ ok: false, error: 'Dominio no permitido (SSRF)' });
-  // Pin connection to validated IP (prevents DNS rebinding - OWASP)
   const { ip, family, hostname } = resolved;
-  const lookup = (host, opts, cb) => cb(null, ip, family);
-  const clientReq = https.request({
-    host: ip,
+  const ociHost = process.env.OCI_HOST;
+  // Hairpin NAT: si el dominio resuelve a nuestro servidor, conectar a localhost (la VM no puede alcanzar su propia IP pública)
+  const connectHost = (ociHost && ip === ociHost.trim()) ? '127.0.0.1' : ip;
+  const lookup = (ociHost && ip === ociHost.trim()) ? undefined : (host, opts, cb) => cb(null, ip, family);
+  const opts = {
+    host: connectHost,
     hostname,
     port: 443,
     path: '/',
     method: 'HEAD',
-    lookup,
     servername: hostname,
-  }, (r) => {
+  };
+  if (lookup) opts.lookup = lookup;
+  const clientReq = https.request(opts, (r) => {
     r.resume();
     if (!res.headersSent) res.json({ ok: r.statusCode >= 200 && r.statusCode < 400 });
   });
