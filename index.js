@@ -6,6 +6,7 @@ const session = require('express-session');
 const rateLimit = require('express-rate-limit');
 const helmet = require('helmet');
 const bcrypt = require('bcryptjs');
+const https = require('https');
 const { Client } = require('ssh2');
 const caddy = require('./src/caddy');
 
@@ -106,6 +107,21 @@ app.post('/api/logout', (req, res) => {
 app.get('/api/me', (req, res) => {
   if (!req.session?.user) return res.status(401).json({});
   res.json(req.session.user);
+});
+
+const checkDomainLimiter = rateLimit({ windowMs: 60 * 1000, max: 30, message: { ok: false } });
+app.get('/api/check-domain', requireAuth, checkDomainLimiter, (req, res) => {
+  const domain = (req.query.domain || '').toString().trim().replace(/^https?:\/\//, '');
+  if (!domain || domain.length > 253) return res.status(400).json({ ok: false, error: 'Dominio inválido' });
+  const url = `https://${domain}/`;
+  const clientReq = https.request(url, { method: 'HEAD' }, (r) => {
+    r.resume(); // consume stream
+    res.json({ ok: r.statusCode >= 200 && r.statusCode < 400 });
+  });
+  clientReq.on('error', () => res.json({ ok: false }));
+  clientReq.on('timeout', () => { clientReq.destroy(); res.json({ ok: false }); });
+  clientReq.setTimeout(8000);
+  clientReq.end();
 });
 
 app.get('/api/sites', requireAuth, (req, res) => {
